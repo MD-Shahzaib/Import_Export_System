@@ -5,9 +5,11 @@ import type React from "react"
 import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { FileSpreadsheet, Upload } from "lucide-react"
+import { FileSpreadsheet, Upload, FileX } from "lucide-react"
 import { parseExcelFile } from "@/lib/excel-utils"
 import { cn } from "@/lib/utils"
+import { validateFileFormat } from "@/lib/validation-utils"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 interface FileUploaderProps {
   onFileData: (data: any[], fileName: string) => void
@@ -17,6 +19,7 @@ export function FileUploader({ onFileData }: FileUploaderProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [formatError, setFormatError] = useState<boolean>(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -47,21 +50,14 @@ export function FileUploader({ onFileData }: FileUploaderProps) {
 
   const processFile = async (file: File) => {
     setError(null)
+    setFormatError(false)
 
     // Check if file is an Excel file
-    const validTypes = [
-      "application/vnd.ms-excel",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "application/vnd.ms-excel.sheet.macroEnabled.12",
-      ".xls",
-      ".xlsx",
-    ]
+    const isValidFormat = validateFileFormat(file.name)
 
-    const fileType = file.type
-    const fileExtension = file.name.split(".").pop()?.toLowerCase()
-
-    if (!validTypes.includes(fileType) && !validTypes.includes(`.${fileExtension}`)) {
+    if (!isValidFormat) {
       setError("Please upload a valid Excel file (.xls, .xlsx)")
+      setFormatError(true)
       return
     }
 
@@ -84,6 +80,19 @@ export function FileUploader({ onFileData }: FileUploaderProps) {
   return (
     <Card className="w-full">
       <CardContent className="p-6">
+        {formatError && (
+          <Alert variant="destructive" className="mb-4">
+            <FileX className="h-4 w-4" />
+            <AlertTitle>Invalid File Format</AlertTitle>
+            <AlertDescription>
+              {error}
+              <div className="mt-2 text-sm">
+                Please ensure your file has one of the following extensions: .xlsx, .xls
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div
           className={cn(
             "border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition-colors",
@@ -124,7 +133,7 @@ export function FileUploader({ onFileData }: FileUploaderProps) {
           </div>
         </div>
 
-        {error && <p className="mt-4 text-sm text-destructive text-center">{error}</p>}
+        {error && !formatError && <p className="mt-4 text-sm text-destructive text-center">{error}</p>}
       </CardContent>
     </Card>
   )

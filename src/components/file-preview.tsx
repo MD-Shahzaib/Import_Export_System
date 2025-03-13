@@ -4,9 +4,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, AlertTriangle, XCircle, HelpCircle } from "lucide-react"
 import type { ValidationError } from "@/lib/types"
-import { getCellErrorMessage, getCellHighlightClass, getRowHighlightClass } from "@/lib/validation-utils"
+import {
+  getCellErrorMessage,
+  getCellHighlightClass,
+  getRowHighlightClass,
+  getCellErrorIcon,
+} from "@/lib/validation-utils"
 
 interface FilePreviewProps {
   data: any[]
@@ -43,6 +48,7 @@ export function FilePreview({ data, columns, validationErrors = [] }: FilePrevie
                     const cellValue = row[column.accessorKey] || "-"
                     const cellClass = getCellHighlightClass(rowIndex, column.accessorKey, validationErrors)
                     const errorMessage = getCellErrorMessage(rowIndex, column.accessorKey, validationErrors)
+                    const errorType = getCellErrorIcon(rowIndex, column.accessorKey, validationErrors)
 
                     return (
                       <TableCell key={colIndex} className={cellClass}>
@@ -52,7 +58,10 @@ export function FilePreview({ data, columns, validationErrors = [] }: FilePrevie
                               <TooltipTrigger asChild>
                                 <div className="flex items-center">
                                   <span className="mr-1">{cellValue}</span>
-                                  <AlertCircle className="h-4 w-4 text-destructive" />
+                                  {errorType === "missing" && <XCircle className="h-4 w-4 text-destructive" />}
+                                  {errorType === "format" && <AlertTriangle className="h-4 w-4 text-amber-500" />}
+                                  {errorType === "invalid" && <AlertCircle className="h-4 w-4 text-orange-500" />}
+                                  {errorType === "other" && <HelpCircle className="h-4 w-4 text-blue-500" />}
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent>

@@ -11,9 +11,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { ColumnConfigurator } from "./column-config"
-import { ValidationResults } from "./validation-results"
-import { validateData } from "@/lib/validation-utils"
-import type { ColumnConfig, ValidationError } from "@/lib/types"
+import { EnhancedValidationResults } from "./enhanced-validation-results"
+import { HeaderValidator } from "./header-validator"
+import { validateData, validateHeaders } from "@/lib/validation-utils"
+import type { ColumnConfig, ValidationError, ValidationResult, HeaderValidationResult } from "@/lib/types"
 
 export function ExcelImportExport() {
   const [data, setData] = useState<any[]>([])
@@ -27,25 +28,30 @@ export function ExcelImportExport() {
   const [showColumnConfig, setShowColumnConfig] = useState<boolean>(false)
   const [columnConfig, setColumnConfig] = useState<ColumnConfig[]>([])
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([])
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
+  const [headerValidationResult, setHeaderValidationResult] = useState<HeaderValidationResult | null>(null)
   const [showValidationResults, setShowValidationResults] = useState<boolean>(false)
+  const [showHeaderValidation, setShowHeaderValidation] = useState<boolean>(false)
+  const [fileHeaders, setFileHeaders] = useState<string[]>([])
 
   const handleFileData = (fileData: any[], name: string) => {
     setError(null)
     setValidationErrors([])
+    setFileName(name)
 
     if (!fileData.length) {
       setError("The uploaded file contains no data")
       return
     }
 
-    // Take first 10 rows for preview
-    setPreviewData(fileData.slice(0, 10))
-    setFileName(name)
-
-    // Generate columns from the first row (headers)
+    // Extract headers from the first row
     if (fileData.length > 0) {
       const firstRow = fileData[0]
-      const cols = Object.keys(firstRow).map((key) => ({
+      const headers = Object.keys(firstRow)
+      setFileHeaders(headers)
+
+      // Generate columns from the headers
+      const cols = headers.map((key) => ({
         accessorKey: key,
         header: key,
         cell: (info: any) => info.getValue() || "-",
@@ -55,16 +61,36 @@ export function ExcelImportExport() {
 
       // Initialize column config if it doesn't exist
       if (columnConfig.length === 0) {
-        setColumnConfig(
-          Object.keys(firstRow).map((key) => ({
-            name: key,
-            required: false,
-            type: "string",
-            validationRules: [],
-          })),
-        )
+        const initialConfig = headers.map((key) => ({
+          name: key,
+          required: false,
+          type: "string",
+          description: `Data for ${key}`,
+          validationRules: [],
+        }))
+        setColumnConfig(initialConfig)
+
+        // Validate headers against the initial config
+        const headerResult = validateHeaders(headers, initialConfig)
+        setHeaderValidationResult(headerResult)
+        setShowHeaderValidation(true)
+      } else {
+        // Validate headers against existing config
+        const headerResult = validateHeaders(headers, columnConfig)
+        setHeaderValidationResult(headerResult)
+        setShowHeaderValidation(true)
       }
     }
+
+    // Take first 10 rows for preview
+    setPreviewData(fileData.slice(0, 10))
+  }
+
+  const handleHeaderValidationContinue = () => {
+    setShowHeaderValidation(false)
+
+    // Validate data with column configuration
+    validateDataWithConfig(previewData)
 
     setActiveTab("preview")
   }
@@ -87,6 +113,7 @@ export function ExcelImportExport() {
 
   const validateDataWithConfig = (dataToValidate: any[]) => {
     const result = validateData(dataToValidate, columnConfig)
+    setValidationResult(result)
     setValidationErrors(result.errors)
 
     if (result.errors.length > 0) {
@@ -140,19 +167,25 @@ export function ExcelImportExport() {
         </Alert>
       )}
 
-      {showColumnConfig ? (
+      {showHeaderValidation && headerValidationResult ? (
+        <HeaderValidator
+          validationResult={headerValidationResult}
+          onContinue={handleHeaderValidationContinue}
+          onCancel={() => setShowHeaderValidation(false)}
+        />
+      ) : showColumnConfig ? (
         <ColumnConfigurator
           columns={columns.map((col) => col.accessorKey)}
           initialConfig={columnConfig}
           onSave={handleConfigureSave}
           onCancel={() => setShowColumnConfig(false)}
         />
-      ) : showValidationResults ? (
-        <ValidationResults
-          errors={validationErrors}
+      ) : showValidationResults && validationResult ? (
+        <EnhancedValidationResults
+          validationResult={validationResult}
           onContinue={() => {
             setShowValidationResults(false)
-            if (validationErrors.length === 0) {
+            if (validationResult.valid) {
               handleImport()
             }
           }}
@@ -190,12 +223,14 @@ export function ExcelImportExport() {
                       const isValid = validateDataWithConfig(previewData)
                       if (isValid) {
                         handleImport()
+                      } else {
+                        setShowValidationResults(true)
                       }
                     }}
                     disabled={isLoading}
                   >
                     <UploadCloud className="mr-2 h-4 w-4" />
-                    {isLoading ? "Importing..." : "Import Data"}
+                    {isLoading ? "Importing..." : "Validate & Import"}
                   </Button>
                 </div>
               </div>
