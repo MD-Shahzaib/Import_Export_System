@@ -5,16 +5,17 @@ import { FileUploader } from "./file-uploader"
 import { FilePreview } from "./file-preview"
 import { DataTable } from "./data-table"
 import { Button } from "@/components/ui/button"
-import { Download, Settings, UploadCloud } from "lucide-react"
+import { Download, Settings, UploadCloud, FileWarning, FileCheck } from "lucide-react"
 import { exportToExcel } from "@/lib/excel-utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
-import { ColumnConfigurator } from "./column-config"
+import { AdvancedConfigPanel } from "./advanced-config-panel"
 import { EnhancedValidationResults } from "./enhanced-validation-results"
 import { HeaderValidator } from "./header-validator"
-import { validateData, validateHeaders } from "@/lib/validation-utils"
-import type { ColumnConfig, ValidationError, ValidationResult, HeaderValidationResult } from "@/lib/types"
+import { validateData, validateHeaders, handleInvalidData, formatValue } from "@/lib/enhanced-validation-utils"
+import type { ValidationError, ValidationResult, HeaderValidationResult, ImporterConfig } from "@/lib/types"
+import { defaultImporterConfig, createDefaultColumnConfig } from "@/lib/default-config"
 
 export function ExcelImportExport() {
   const [data, setData] = useState<any[]>([])
@@ -25,14 +26,15 @@ export function ExcelImportExport() {
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [progress, setProgress] = useState<number>(0)
   const [error, setError] = useState<string | null>(null)
-  const [showColumnConfig, setShowColumnConfig] = useState<boolean>(false)
-  const [columnConfig, setColumnConfig] = useState<ColumnConfig[]>([])
+  const [showAdvancedConfig, setShowAdvancedConfig] = useState<boolean>(false)
+  const [importerConfig, setImporterConfig] = useState<ImporterConfig>(defaultImporterConfig)
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([])
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
   const [headerValidationResult, setHeaderValidationResult] = useState<HeaderValidationResult | null>(null)
   const [showValidationResults, setShowValidationResults] = useState<boolean>(false)
   const [showHeaderValidation, setShowHeaderValidation] = useState<boolean>(false)
   const [fileHeaders, setFileHeaders] = useState<string[]>([])
+  const [processedData, setProcessedData] = useState<any[]>([])
 
   const handleFileData = (fileData: any[], name: string) => {
     setError(null)
@@ -59,24 +61,25 @@ export function ExcelImportExport() {
       }))
       setColumns(cols)
 
-      // Initialize column config if it doesn't exist
-      if (columnConfig.length === 0) {
-        const initialConfig = headers.map((key) => ({
-          name: key,
-          required: false,
-          type: "string",
-          description: `Data for ${key}`,
-          validationRules: [],
-        }))
-        setColumnConfig(initialConfig)
+      // Initialize column config if it doesn't exist or is empty
+      if (importerConfig.columns.length === 0) {
+        const initialColumns = headers.map((key) => createDefaultColumnConfig(key))
+
+        setImporterConfig({
+          ...importerConfig,
+          columns: initialColumns,
+        })
 
         // Validate headers against the initial config
-        const headerResult = validateHeaders(headers, initialConfig)
+        const headerResult = validateHeaders(headers, {
+          ...importerConfig,
+          columns: initialColumns,
+        })
         setHeaderValidationResult(headerResult)
         setShowHeaderValidation(true)
       } else {
         // Validate headers against existing config
-        const headerResult = validateHeaders(headers, columnConfig)
+        const headerResult = validateHeaders(headers, importerConfig)
         setHeaderValidationResult(headerResult)
         setShowHeaderValidation(true)
       }
@@ -84,35 +87,38 @@ export function ExcelImportExport() {
 
     // Take first 10 rows for preview
     setPreviewData(fileData.slice(0, 10))
+    setProcessedData(fileData)
   }
 
   const handleHeaderValidationContinue = () => {
     setShowHeaderValidation(false)
 
     // Validate data with column configuration
-    validateDataWithConfig(previewData)
+    validateDataWithConfig(processedData)
 
     setActiveTab("preview")
   }
 
-  const handleConfigureSave = (config: ColumnConfig[]) => {
-    setColumnConfig(config)
+  const handleConfigSave = (config: ImporterConfig) => {
+    setImporterConfig(config)
 
     // Update columns with required status
     const updatedColumns = columns.map((col) => ({
       ...col,
-      required: config.find((c) => c.name === col.accessorKey)?.required || false,
+      required: config.columns.find((c) => c.name === col.accessorKey)?.required || false,
     }))
     setColumns(updatedColumns)
 
-    setShowColumnConfig(false)
+    setShowAdvancedConfig(false)
 
     // Validate data with new configuration
-    validateDataWithConfig(previewData)
+    if (processedData.length > 0) {
+      validateDataWithConfig(processedData)
+    }
   }
 
   const validateDataWithConfig = (dataToValidate: any[]) => {
-    const result = validateData(dataToValidate, columnConfig)
+    const result = validateData(dataToValidate, importerConfig)
     setValidationResult(result)
     setValidationErrors(result.errors)
 
@@ -125,7 +131,7 @@ export function ExcelImportExport() {
 
   const handleImport = () => {
     // Validate all data before importing
-    const isValid = validateDataWithConfig(previewData)
+    const isValid = validateDataWithConfig(processedData)
 
     if (!isValid) {
       return
@@ -134,13 +140,40 @@ export function ExcelImportExport() {
     setIsLoading(true)
     setProgress(0)
 
+    // Process data according to column configuration
+    const processedImportData = processedData.map((row) => {
+      const processedRow: Record<string, any> = {}
+
+      importerConfig.columns.forEach((column) => {
+        const value = row[column.name]
+
+        // Skip columns that aren't in the data
+        if (value === undefined) return
+
+        // Handle invalid data according to column configuration
+        const isValid = !validationErrors.some(
+          (error) => error.column === column.name && String(error.value) === String(value),
+        )
+
+        if (isValid) {
+          // Format valid data
+          processedRow[column.name] = value
+        } else {
+          // Handle invalid data
+          processedRow[column.name] = handleInvalidData(value, column)
+        }
+      })
+
+      return processedRow
+    })
+
     // Simulate processing time for large files
     const timer = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 100) {
           clearInterval(timer)
           setIsLoading(false)
-          setData(previewData)
+          setData(processedImportData)
           setActiveTab("data")
           return 100
         }
@@ -155,13 +188,31 @@ export function ExcelImportExport() {
       return
     }
 
-    exportToExcel(data, fileName || "exported-data")
+    // Format data for export according to column configuration
+    const formattedData = data.map((row) => {
+      const formattedRow: Record<string, any> = {}
+
+      importerConfig.columns.forEach((column) => {
+        const value = row[column.name]
+
+        // Skip columns that aren't in the data
+        if (value === undefined) return
+
+        // Format the value according to column configuration
+        formattedRow[column.displayName || column.name] = formatValue(value, column)
+      })
+
+      return formattedRow
+    })
+
+    exportToExcel(formattedData, fileName || "exported-data")
   }
 
   return (
     <div className="space-y-6">
       {error && (
         <Alert variant="destructive">
+          <FileWarning className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -173,12 +224,11 @@ export function ExcelImportExport() {
           onContinue={handleHeaderValidationContinue}
           onCancel={() => setShowHeaderValidation(false)}
         />
-      ) : showColumnConfig ? (
-        <ColumnConfigurator
-          columns={columns.map((col) => col.accessorKey)}
-          initialConfig={columnConfig}
-          onSave={handleConfigureSave}
-          onCancel={() => setShowColumnConfig(false)}
+      ) : showAdvancedConfig ? (
+        <AdvancedConfigPanel
+          config={importerConfig}
+          onSave={handleConfigSave}
+          onCancel={() => setShowAdvancedConfig(false)}
         />
       ) : showValidationResults && validationResult ? (
         <EnhancedValidationResults
@@ -205,7 +255,12 @@ export function ExcelImportExport() {
 
           <TabsContent value="upload" className="py-4">
             <div className="flex flex-col items-center justify-center space-y-4">
-              <FileUploader onFileData={handleFileData} />
+              <FileUploader onFileData={handleFileData} acceptedFormats={importerConfig.acceptedFormats} />
+
+              <Button variant="outline" onClick={() => setShowAdvancedConfig(true)} className="mt-4">
+                <Settings className="mr-2 h-4 w-4" />
+                Configure Import Settings
+              </Button>
             </div>
           </TabsContent>
 
@@ -214,13 +269,13 @@ export function ExcelImportExport() {
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold">Preview: {fileName}</h2>
                 <div className="flex space-x-2">
-                  <Button variant="outline" onClick={() => setShowColumnConfig(true)}>
+                  <Button variant="outline" onClick={() => setShowAdvancedConfig(true)}>
                     <Settings className="mr-2 h-4 w-4" />
                     Configure Fields
                   </Button>
                   <Button
                     onClick={() => {
-                      const isValid = validateDataWithConfig(previewData)
+                      const isValid = validateDataWithConfig(processedData)
                       if (isValid) {
                         handleImport()
                       } else {
@@ -244,6 +299,14 @@ export function ExcelImportExport() {
 
               {previewData.length > 0 && (
                 <FilePreview data={previewData} columns={columns} validationErrors={validationErrors} />
+              )}
+
+              {validationResult && validationResult.valid && (
+                <Alert variant="success" className="bg-green-50 text-green-800 border-green-200">
+                  <FileCheck className="h-4 w-4" />
+                  <AlertTitle>Validation Passed</AlertTitle>
+                  <AlertDescription>All data meets the required format and validation rules</AlertDescription>
+                </Alert>
               )}
             </div>
           </TabsContent>

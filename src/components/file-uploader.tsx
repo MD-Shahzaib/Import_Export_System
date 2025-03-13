@@ -8,14 +8,15 @@ import { Card, CardContent } from "@/components/ui/card"
 import { FileSpreadsheet, Upload, FileX } from "lucide-react"
 import { parseExcelFile } from "@/lib/excel-utils"
 import { cn } from "@/lib/utils"
-import { validateFileFormat } from "@/lib/validation-utils"
+import { validateFileFormat } from "@/lib/enhanced-validation-utils"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 interface FileUploaderProps {
   onFileData: (data: any[], fileName: string) => void
+  acceptedFormats?: string[]
 }
 
-export function FileUploader({ onFileData }: FileUploaderProps) {
+export function FileUploader({ onFileData, acceptedFormats = [".xlsx", ".xls"] }: FileUploaderProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,11 +53,11 @@ export function FileUploader({ onFileData }: FileUploaderProps) {
     setError(null)
     setFormatError(false)
 
-    // Check if file is an Excel file
-    const isValidFormat = validateFileFormat(file.name)
+    // Check if file is an accepted format
+    const isValidFormat = validateFileFormat(file.name, acceptedFormats)
 
     if (!isValidFormat) {
-      setError("Please upload a valid Excel file (.xls, .xlsx)")
+      setError(`Please upload a file in one of these formats: ${acceptedFormats.join(", ")}`)
       setFormatError(true)
       return
     }
@@ -66,7 +67,7 @@ export function FileUploader({ onFileData }: FileUploaderProps) {
       const data = await parseExcelFile(file)
       onFileData(data, file.name)
     } catch (err) {
-      setError("Failed to parse Excel file. Please check the file format.")
+      setError("Failed to parse file. Please check the file format.")
       console.error(err)
     } finally {
       setIsProcessing(false)
@@ -86,9 +87,7 @@ export function FileUploader({ onFileData }: FileUploaderProps) {
             <AlertTitle>Invalid File Format</AlertTitle>
             <AlertDescription>
               {error}
-              <div className="mt-2 text-sm">
-                Please ensure your file has one of the following extensions: .xlsx, .xls
-              </div>
+              <div className="mt-2 text-sm">Accepted formats: {acceptedFormats.join(", ")}</div>
             </AlertDescription>
           </Alert>
         )}
@@ -108,7 +107,7 @@ export function FileUploader({ onFileData }: FileUploaderProps) {
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept=".xls,.xlsx"
+            accept={acceptedFormats.join(",")}
             className="hidden"
             disabled={isProcessing}
           />
@@ -119,11 +118,11 @@ export function FileUploader({ onFileData }: FileUploaderProps) {
             </div>
 
             <div className="space-y-2">
-              <h3 className="text-lg font-medium">{isProcessing ? "Processing file..." : "Upload Excel File"}</h3>
+              <h3 className="text-lg font-medium">{isProcessing ? "Processing file..." : "Upload File"}</h3>
               <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                Drag and drop your Excel file here, or click to browse
+                Drag and drop your file here, or click to browse
               </p>
-              <p className="text-xs text-muted-foreground">Supports .xls and .xlsx formats</p>
+              <p className="text-xs text-muted-foreground">Supports {acceptedFormats.join(", ")} formats</p>
             </div>
 
             <Button variant="outline" disabled={isProcessing}>
