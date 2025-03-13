@@ -98,7 +98,7 @@ export function HeaderValidator({ validationResult, onContinue, onCancel }: Head
                                     return (
                                         <TableRow key={index}>
                                             <TableCell className="font-medium">
-                                                {header.name}
+                                                {header.displayName || header.name}
                                                 {header.required && <span className="text-red-500 ml-1">*</span>}
                                             </TableCell>
                                             <TableCell>

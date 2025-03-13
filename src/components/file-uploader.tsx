@@ -13,10 +13,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 interface FileUploaderProps {
   onFileData: (data: any[], fileName: string) => void
-  acceptedFormats?: string[]
+  acceptedFormats: string[]
 }
 
-export function FileUploader({ onFileData, acceptedFormats = [".xlsx", ".xls"] }: FileUploaderProps) {
+export function FileUploader({ onFileData, acceptedFormats }: FileUploaderProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)

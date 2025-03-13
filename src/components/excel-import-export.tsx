@@ -14,10 +14,26 @@ import { AdvancedConfigPanel } from "./advanced-config-panel"
 import { EnhancedValidationResults } from "./enhanced-validation-results"
 import { HeaderValidator } from "./header-validator"
 import { validateData, validateHeaders, handleInvalidData, formatValue } from "@/lib/enhanced-validation-utils"
-import type { ValidationError, ValidationResult, HeaderValidationResult, ImporterConfig } from "@/lib/types"
+import type {
+  ValidationError,
+  ValidationResult,
+  HeaderValidationResult,
+  ImporterConfig,
+  ColumnConfig,
+} from "@/lib/types"
 import { defaultImporterConfig, createDefaultColumnConfig } from "@/lib/default-config"
 
-export function ExcelImportExport() {
+interface ExcelImportExportProps {
+  requiredColumns?: string[]
+  optionalColumns?: string[]
+  acceptedFormats?: string[]
+}
+
+export function ExcelImportExport({
+  requiredColumns = [],
+  optionalColumns = [],
+  acceptedFormats = [".xlsx", ".xls", ".csv"],
+}: ExcelImportExportProps) {
   const [data, setData] = useState<any[]>([])
   const [columns, setColumns] = useState<any[]>([])
   const [previewData, setPreviewData] = useState<any[]>([])
@@ -27,7 +43,28 @@ export function ExcelImportExport() {
   const [progress, setProgress] = useState<number>(0)
   const [error, setError] = useState<string | null>(null)
   const [showAdvancedConfig, setShowAdvancedConfig] = useState<boolean>(false)
-  const [importerConfig, setImporterConfig] = useState<ImporterConfig>(defaultImporterConfig)
+
+  // Initialize the importer config with the provided props
+  const [importerConfig, setImporterConfig] = useState<ImporterConfig>(() => {
+    // Create initial configuration from props
+    const initialColumns: ColumnConfig[] = [
+      ...requiredColumns.map((name) => ({
+        ...createDefaultColumnConfig(name),
+        required: true,
+      })),
+      ...optionalColumns.map((name) => ({
+        ...createDefaultColumnConfig(name),
+        required: false,
+      })),
+    ]
+
+    return {
+      ...defaultImporterConfig,
+      columns: initialColumns,
+      acceptedFormats: acceptedFormats,
+    }
+  })
+
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([])
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
   const [headerValidationResult, setHeaderValidationResult] = useState<HeaderValidationResult | null>(null)
@@ -53,32 +90,45 @@ export function ExcelImportExport() {
       setFileHeaders(headers)
 
       // Generate columns from the headers
-      const cols = headers.map((key) => ({
-        accessorKey: key,
-        header: key,
-        cell: (info: any) => info.getValue() || "-",
-        required: false, // Default to not required
-      }))
+      const cols = headers.map((key) => {
+        // Check if this column is in our configuration
+        const configColumn = importerConfig.columns.find((col) => col.name === key)
+
+        return {
+          accessorKey: key,
+          header: configColumn?.displayName || key,
+          cell: (info: any) => info.getValue() || "-",
+          required: configColumn?.required || false,
+        }
+      })
       setColumns(cols)
 
-      // Initialize column config if it doesn't exist or is empty
-      if (importerConfig.columns.length === 0) {
-        const initialColumns = headers.map((key) => createDefaultColumnConfig(key))
+      // If we have pre-configured columns, we need to check if they exist in the file
+      // and add any new columns from the file
+      const existingColumnNames = importerConfig.columns.map((col) => col.name)
+      const newHeaders = headers.filter((header) => !existingColumnNames.includes(header))
+
+      if (newHeaders.length > 0 || importerConfig.columns.length === 0) {
+        // We have new columns to add to the configuration
+        const updatedColumns = [
+          ...importerConfig.columns,
+          ...newHeaders.map((header) => createDefaultColumnConfig(header)),
+        ]
 
         setImporterConfig({
           ...importerConfig,
-          columns: initialColumns,
+          columns: updatedColumns,
         })
 
-        // Validate headers against the initial config
+        // Validate headers against the updated config
         const headerResult = validateHeaders(headers, {
           ...importerConfig,
-          columns: initialColumns,
+          columns: updatedColumns,
         })
         setHeaderValidationResult(headerResult)
         setShowHeaderValidation(true)
       } else {
-        // Validate headers against existing config
+        // Just validate headers against existing config
         const headerResult = validateHeaders(headers, importerConfig)
         setHeaderValidationResult(headerResult)
         setShowHeaderValidation(true)
