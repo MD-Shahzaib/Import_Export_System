@@ -5,7 +5,7 @@ import { FileUploader } from "./file-uploader"
 import { FilePreview } from "./file-preview"
 import { DataTable } from "./data-table"
 import { Button } from "@/components/ui/button"
-import { Download, Settings, UploadCloud, FileWarning, FileCheck } from "lucide-react"
+import { Download, Settings, UploadCloud, FileWarning, FileCheck, AlertTriangle } from "lucide-react"
 import { exportToExcel } from "@/lib/excel-utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -13,13 +13,16 @@ import { Progress } from "@/components/ui/progress"
 import { AdvancedConfigPanel } from "./advanced-config-panel"
 import { EnhancedValidationResults } from "./enhanced-validation-results"
 import { HeaderValidator } from "./header-validator"
+import { SchemaValidationResults } from "./schema-validation-results"
 import { validateData, validateHeaders, handleInvalidData, formatValue } from "@/lib/enhanced-validation-utils"
+import { validateSchema, removeColumns } from "@/lib/schema-validation"
 import type {
   ValidationError,
   ValidationResult,
   HeaderValidationResult,
   ImporterConfig,
   ColumnConfig,
+  SchemaValidationResult,
 } from "@/lib/types"
 import { defaultImporterConfig, createDefaultColumnConfig } from "@/lib/default-config"
 
@@ -27,12 +30,14 @@ interface ExcelImportExportProps {
   requiredColumns?: string[]
   optionalColumns?: string[]
   acceptedFormats?: string[]
+  strictSchema?: boolean
 }
 
 export function ExcelImportExport({
   requiredColumns = [],
   optionalColumns = [],
   acceptedFormats = [".xlsx", ".xls", ".csv"],
+  strictSchema = false,
 }: ExcelImportExportProps) {
   const [data, setData] = useState<any[]>([])
   const [columns, setColumns] = useState<any[]>([])
@@ -62,16 +67,21 @@ export function ExcelImportExport({
       ...defaultImporterConfig,
       columns: initialColumns,
       acceptedFormats: acceptedFormats,
+      // If strictSchema is true, set to reject, otherwise warn
+      invalidColumnHandling: strictSchema ? "reject" : "warn",
     }
   })
 
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([])
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
   const [headerValidationResult, setHeaderValidationResult] = useState<HeaderValidationResult | null>(null)
+  const [schemaValidationResult, setSchemaValidationResult] = useState<SchemaValidationResult | null>(null)
   const [showValidationResults, setShowValidationResults] = useState<boolean>(false)
   const [showHeaderValidation, setShowHeaderValidation] = useState<boolean>(false)
+  const [showSchemaValidation, setShowSchemaValidation] = useState<boolean>(false)
   const [fileHeaders, setFileHeaders] = useState<string[]>([])
   const [processedData, setProcessedData] = useState<any[]>([])
+  const [originalData, setOriginalData] = useState<any[]>([])
 
   const handleFileData = (fileData: any[], name: string) => {
     setError(null)
@@ -83,14 +93,32 @@ export function ExcelImportExport({
       return
     }
 
+    // Save original data
+    setOriginalData(fileData)
+
     // Extract headers from the first row
     if (fileData.length > 0) {
       const firstRow = fileData[0]
       const headers = Object.keys(firstRow)
       setFileHeaders(headers)
 
-      // Generate columns from the headers
-      const cols = headers.map((key) => {
+      // Perform schema validation
+      const schemaResult = validateSchema(fileData, importerConfig)
+      setSchemaValidationResult(schemaResult)
+
+      // If schema validation fails and we're in strict mode, show schema validation
+      if (!schemaResult.valid && strictSchema) {
+        setShowSchemaValidation(true)
+        return
+      }
+
+      // Use the valid data from schema validation
+      const validatedData = schemaResult.valid ? fileData : schemaResult.validData
+      setProcessedData(validatedData)
+
+      // Generate columns from the headers that are in the validated data
+      const validatedHeaders = Object.keys(validatedData[0])
+      const cols = validatedHeaders.map((key) => {
         // Check if this column is in our configuration
         const configColumn = importerConfig.columns.find((col) => col.name === key)
 
@@ -104,9 +132,9 @@ export function ExcelImportExport({
       setColumns(cols)
 
       // If we have pre-configured columns, we need to check if they exist in the file
-      // and add any new columns from the file
+      // and add any new columns from the file that are not extra columns
       const existingColumnNames = importerConfig.columns.map((col) => col.name)
-      const newHeaders = headers.filter((header) => !existingColumnNames.includes(header))
+      const newHeaders = validatedHeaders.filter((header) => !existingColumnNames.includes(header))
 
       if (newHeaders.length > 0 || importerConfig.columns.length === 0) {
         // We have new columns to add to the configuration
@@ -121,7 +149,7 @@ export function ExcelImportExport({
         })
 
         // Validate headers against the updated config
-        const headerResult = validateHeaders(headers, {
+        const headerResult = validateHeaders(validatedHeaders, {
           ...importerConfig,
           columns: updatedColumns,
         })
@@ -129,15 +157,14 @@ export function ExcelImportExport({
         setShowHeaderValidation(true)
       } else {
         // Just validate headers against existing config
-        const headerResult = validateHeaders(headers, importerConfig)
+        const headerResult = validateHeaders(validatedHeaders, importerConfig)
         setHeaderValidationResult(headerResult)
         setShowHeaderValidation(true)
       }
-    }
 
-    // Take first 10 rows for preview
-    setPreviewData(fileData.slice(0, 10))
-    setProcessedData(fileData)
+      // Take first 10 rows for preview
+      setPreviewData(validatedData.slice(0, 10))
+    }
   }
 
   const handleHeaderValidationContinue = () => {
@@ -147,6 +174,48 @@ export function ExcelImportExport({
     validateDataWithConfig(processedData)
 
     setActiveTab("preview")
+  }
+
+  const handleSchemaValidationContinue = (validData: any[]) => {
+    setShowSchemaValidation(false)
+    setProcessedData(validData)
+
+    // Extract headers from the validated data
+    const validatedHeaders = Object.keys(validData[0])
+
+    // Generate columns from the headers
+    const cols = validatedHeaders.map((key) => {
+      // Check if this column is in our configuration
+      const configColumn = importerConfig.columns.find((col) => col.name === key)
+
+      return {
+        accessorKey: key,
+        header: configColumn?.displayName || key,
+        cell: (info: any) => info.getValue() || "-",
+        required: configColumn?.required || false,
+      }
+    })
+    setColumns(cols)
+
+    // Validate headers against existing config
+    const headerResult = validateHeaders(validatedHeaders, importerConfig)
+    setHeaderValidationResult(headerResult)
+    setShowHeaderValidation(true)
+
+    // Take first 10 rows for preview
+    setPreviewData(validData.slice(0, 10))
+  }
+
+  const handleRemoveColumns = (columnsToRemove: string[]) => {
+    // Remove the selected columns from the data
+    const updatedData = removeColumns(originalData, columnsToRemove)
+
+    // Update the schema validation result
+    const updatedSchemaResult = validateSchema(updatedData, importerConfig)
+    setSchemaValidationResult(updatedSchemaResult)
+
+    // Continue with the updated data
+    handleSchemaValidationContinue(updatedData)
   }
 
   const handleConfigSave = (config: ImporterConfig) => {
@@ -161,9 +230,23 @@ export function ExcelImportExport({
 
     setShowAdvancedConfig(false)
 
-    // Validate data with new configuration
-    if (processedData.length > 0) {
-      validateDataWithConfig(processedData)
+    // Re-validate schema with new configuration
+    if (originalData.length > 0) {
+      const schemaResult = validateSchema(originalData, config)
+      setSchemaValidationResult(schemaResult)
+
+      // If schema validation fails and we're in strict mode, show schema validation
+      if (!schemaResult.valid && strictSchema) {
+        setShowSchemaValidation(true)
+        return
+      }
+
+      // Use the valid data from schema validation
+      const validatedData = schemaResult.valid ? originalData : schemaResult.validData
+      setProcessedData(validatedData)
+
+      // Validate data with new configuration
+      validateDataWithConfig(validatedData)
     }
   }
 
@@ -268,7 +351,15 @@ export function ExcelImportExport({
         </Alert>
       )}
 
-      {showHeaderValidation && headerValidationResult ? (
+      {showSchemaValidation && schemaValidationResult ? (
+        <SchemaValidationResults
+          data={originalData}
+          schemaValidationResult={schemaValidationResult}
+          onContinue={handleSchemaValidationContinue}
+          onRemoveColumns={handleRemoveColumns}
+          onCancel={() => setShowSchemaValidation(false)}
+        />
+      ) : showHeaderValidation && headerValidationResult ? (
         <HeaderValidator
           validationResult={headerValidationResult}
           onContinue={handleHeaderValidationContinue}
@@ -356,6 +447,24 @@ export function ExcelImportExport({
                   <FileCheck className="h-4 w-4" />
                   <AlertTitle>Validation Passed</AlertTitle>
                   <AlertDescription>All data meets the required format and validation rules</AlertDescription>
+                </Alert>
+              )}
+
+              {schemaValidationResult && !schemaValidationResult.valid && !strictSchema && (
+                <Alert variant="warning" className="bg-amber-50 text-amber-800 border-amber-200">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Extra Columns Present</AlertTitle>
+                  <AlertDescription>
+                    {schemaValidationResult.extraColumns.length} column(s) not defined in the schema were found and{" "}
+                    {importerConfig.invalidColumnHandling === "ignore" ? "removed" : "kept"}.
+                    <Button
+                      variant="link"
+                      className="p-0 h-auto text-amber-800 underline"
+                      onClick={() => setShowSchemaValidation(true)}
+                    >
+                      View details
+                    </Button>
+                  </AlertDescription>
                 </Alert>
               )}
             </div>

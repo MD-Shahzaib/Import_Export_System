@@ -6,6 +6,7 @@ interface SimpleExcelImporterProps {
     requiredColumns: string[]
     optionalColumns?: string[]
     acceptedFormats?: string[]
+    strictSchema?: boolean
     title?: string
 }
 
@@ -13,6 +14,7 @@ export function SimpleExcelImporter({
     requiredColumns,
     optionalColumns = [],
     acceptedFormats = [".xlsx", ".xls"],
+    strictSchema = false,
     title = "Excel Import & Export System",
 }: SimpleExcelImporterProps) {
     return (
@@ -23,6 +25,7 @@ export function SimpleExcelImporter({
                 requiredColumns={requiredColumns}
                 optionalColumns={optionalColumns}
                 acceptedFormats={acceptedFormats}
+                strictSchema={strictSchema}
             />
         </div>
     )

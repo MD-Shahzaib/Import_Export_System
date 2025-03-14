@@ -9,7 +9,8 @@ export default function Home() {
         requiredColumns={["Name", "Email", "Department"]}
         optionalColumns={["Phone", "Address", "StartDate", "Salary"]}
         acceptedFormats={[".xlsx", ".csv"]}
-        title="Employee Data Import"
+        strictSchema={true}
+        title="Employee Data Import with Schema Validation"
       />
     </main>
   )

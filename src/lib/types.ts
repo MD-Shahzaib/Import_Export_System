@@ -122,3 +122,24 @@ export interface ImporterConfig {
     dataTypeConfig: DataTypeConfig
 }
 
+export interface SchemaValidationResult {
+    valid: boolean
+    extraColumns: string[]
+    validData: any[]
+    errorReport: {
+        message: string
+        details: {
+            column: string
+            message: string
+        }[]
+    } | null
+}
+
+export interface SchemaValidationProps {
+    data: any[]
+    schemaValidationResult: SchemaValidationResult
+    onContinue: (data: any[]) => void
+    onRemoveColumns: (columns: string[]) => void
+    onCancel: () => void
+}
+
