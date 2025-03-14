@@ -12,7 +12,7 @@ import { validateFileFormat } from "@/lib/enhanced-validation-utils"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 interface FileUploaderProps {
-  onFileData: (data: any[], fileName: string) => void
+  onFileData: (data: any[], fileName: string, file?: File) => void
   acceptedFormats: string[]
 }
 
@@ -65,7 +65,7 @@ export function FileUploader({ onFileData, acceptedFormats }: FileUploaderProps)
     try {
       setIsProcessing(true)
       const data = await parseExcelFile(file)
-      onFileData(data, file.name)
+      onFileData(data, file.name, file) // Pass the file object to the parent
     } catch (err) {
       setError("Failed to parse file. Please check the file format.")
       console.error(err)

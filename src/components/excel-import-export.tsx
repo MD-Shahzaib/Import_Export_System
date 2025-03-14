@@ -51,6 +51,7 @@ export function ExcelImportExport({
   const [progress, setProgress] = useState<number>(0)
   const [error, setError] = useState<string | null>(null)
   const [showAdvancedConfig, setShowAdvancedConfig] = useState<boolean>(false)
+  const [originalFile, setOriginalFile] = useState<File | null>(null)
 
   // Initialize the importer config with the provided props
   const [importerConfig, setImporterConfig] = useState<ImporterConfig>(() => {
@@ -87,10 +88,15 @@ export function ExcelImportExport({
   const [originalData, setOriginalData] = useState<any[]>([])
   const [showApiDialog, setShowApiDialog] = useState<boolean>(false)
 
-  const handleFileData = (fileData: any[], name: string) => {
+  const handleFileData = (fileData: any[], name: string, file?: File) => {
     setError(null)
     setValidationErrors([])
     setFileName(name)
+
+    // Store the original file for potential file upload
+    if (file) {
+      setOriginalFile(file)
+    }
 
     if (!fileData.length) {
       setError("The uploaded file contains no data")
@@ -494,7 +500,13 @@ export function ExcelImportExport({
         </Tabs>
       )}
       {showApiDialog && (
-        <ApiSubmissionDialog data={data} onClose={() => setShowApiDialog(false)} initialEndpoint={apiEndpoint} />
+        <ApiSubmissionDialog
+          data={data}
+          originalFile={originalFile || undefined}
+          acceptedFormats={importerConfig.acceptedFormats}
+          onClose={() => setShowApiDialog(false)}
+          initialEndpoint={apiEndpoint}
+        />
       )}
     </div>
   )
