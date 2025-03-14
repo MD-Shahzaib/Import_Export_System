@@ -40,7 +40,7 @@ export function ExcelImportExport({
   optionalColumns = [],
   acceptedFormats = [".xlsx", ".xls", ".csv"],
   strictSchema = false,
-  apiEndpoint,
+  apiEndpoint = "",
 }: ExcelImportExportProps) {
   const [data, setData] = useState<any[]>([])
   const [columns, setColumns] = useState<any[]>([])
