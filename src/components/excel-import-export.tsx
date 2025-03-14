@@ -5,7 +5,7 @@ import { FileUploader } from "./file-uploader"
 import { FilePreview } from "./file-preview"
 import { DataTable } from "./data-table"
 import { Button } from "@/components/ui/button"
-import { Download, Settings, UploadCloud, FileWarning, FileCheck, AlertTriangle } from "lucide-react"
+import { Download, Settings, UploadCloud, FileWarning, FileCheck, AlertTriangle, Send } from "lucide-react"
 import { exportToExcel } from "@/lib/excel-utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -25,12 +25,14 @@ import type {
   SchemaValidationResult,
 } from "@/lib/types"
 import { defaultImporterConfig, createDefaultColumnConfig } from "@/lib/default-config"
+import { ApiSubmissionDialog } from "./api-submission-dialog"
 
 interface ExcelImportExportProps {
   requiredColumns?: string[]
   optionalColumns?: string[]
   acceptedFormats?: string[]
   strictSchema?: boolean
+  apiEndpoint?: string
 }
 
 export function ExcelImportExport({
@@ -38,6 +40,7 @@ export function ExcelImportExport({
   optionalColumns = [],
   acceptedFormats = [".xlsx", ".xls", ".csv"],
   strictSchema = false,
+  apiEndpoint,
 }: ExcelImportExportProps) {
   const [data, setData] = useState<any[]>([])
   const [columns, setColumns] = useState<any[]>([])
@@ -82,6 +85,7 @@ export function ExcelImportExport({
   const [fileHeaders, setFileHeaders] = useState<string[]>([])
   const [processedData, setProcessedData] = useState<any[]>([])
   const [originalData, setOriginalData] = useState<any[]>([])
+  const [showApiDialog, setShowApiDialog] = useState<boolean>(false)
 
   const handleFileData = (fileData: any[], name: string) => {
     setError(null)
@@ -478,12 +482,19 @@ export function ExcelImportExport({
                   <Download className="mr-2 h-4 w-4" />
                   Export to Excel
                 </Button>
+                <Button variant="outline" onClick={() => setShowApiDialog(true)} disabled={data.length === 0}>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send to API
+                </Button>
               </div>
 
               {data.length > 0 && <DataTable data={data} columns={columns} />}
             </div>
           </TabsContent>
         </Tabs>
+      )}
+      {showApiDialog && (
+        <ApiSubmissionDialog data={data} onClose={() => setShowApiDialog(false)} initialEndpoint={apiEndpoint} />
       )}
     </div>
   )

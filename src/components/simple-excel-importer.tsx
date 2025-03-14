@@ -8,6 +8,7 @@ interface SimpleExcelImporterProps {
     acceptedFormats?: string[]
     strictSchema?: boolean
     title?: string
+    apiEndpoint?: string
 }
 
 export function SimpleExcelImporter({
@@ -16,6 +17,7 @@ export function SimpleExcelImporter({
     acceptedFormats = [".xlsx", ".xls"],
     strictSchema = false,
     title = "Excel Import & Export System",
+    apiEndpoint,
 }: SimpleExcelImporterProps) {
     return (
         <div className="space-y-4">
@@ -26,6 +28,7 @@ export function SimpleExcelImporter({
                 optionalColumns={optionalColumns}
                 acceptedFormats={acceptedFormats}
                 strictSchema={strictSchema}
+                apiEndpoint={apiEndpoint}
             />
         </div>
     )
