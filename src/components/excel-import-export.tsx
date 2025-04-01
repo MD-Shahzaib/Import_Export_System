@@ -26,6 +26,7 @@ import type {
 } from "@/lib/types"
 import { defaultImporterConfig, createDefaultColumnConfig } from "@/lib/default-config"
 import { ApiSubmissionDialog } from "./api-submission-dialog"
+import { FailedSubmissionsIndicator } from "./failed-submissions-indicator"
 
 interface ExcelImportExportProps {
   requiredColumns?: string[]
@@ -484,14 +485,17 @@ export function ExcelImportExport({
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold">Imported Data</h2>
-                <Button onClick={handleExport}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Export to Excel
-                </Button>
-                <Button variant="outline" onClick={() => setShowApiDialog(true)} disabled={data.length === 0}>
-                  <Send className="mr-2 h-4 w-4" />
-                  Send to API
-                </Button>
+                <div className="flex items-center space-x-2">
+                  <FailedSubmissionsIndicator />
+                  <Button onClick={handleExport}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Export to Excel
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowApiDialog(true)} disabled={data.length === 0}>
+                    <Send className="mr-2 h-4 w-4" />
+                    Send to API
+                  </Button>
+                </div>
               </div>
 
               {data.length > 0 && <DataTable data={data} columns={columns} />}
@@ -511,4 +515,3 @@ export function ExcelImportExport({
     </div>
   )
 }
-

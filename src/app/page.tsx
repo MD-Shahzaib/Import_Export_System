@@ -1,17 +1,39 @@
+"use client"
 import { SimpleExcelImporter } from "@/components/simple-excel-importer"
+import { FailedSubmissionsIndicator } from "@/components/failed-submissions-indicator"
 
 export default function Home() {
   return (
     <main className="container mx-auto py-10 px-4">
-      <h1 className="text-3xl font-bold mb-8">Excel Import & Export System</h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold">Excel Import & Export System</h1>
+        <FailedSubmissionsIndicator />
+      </div>
 
       <SimpleExcelImporter
-        requiredColumns={["Name", "Email", "Department"]}
-        optionalColumns={["Phone", "Address", "StartDate", "Salary"]}
+        requiredColumns={[
+          "payment_type",
+          "customer_type",
+          "extraChg",
+          "booking_status",
+          "booking_date",
+          "booking_time",
+          "customer_name",
+          "customer_phone",
+          "pickup_address",
+          "drop_address",
+          "vehicle_type",
+          "is_paid",
+        ]}
+        optionalColumns={[
+          "customer_email",
+          "note",
+          "waypoints",
+        ]}
         acceptedFormats={[".xlsx", ".csv"]}
         strictSchema={true}
-        title="Employee Data Import with API Submission"
-        apiEndpoint="https://api.example.com/employees"
+        title="Upload your bookings file, preview the data for verification, and import it into the system."
+        apiEndpoint="http://localhost:3333/api/v1/booking/upload"
       />
 
       <div className="mt-8 p-4 bg-muted rounded-md">
@@ -66,4 +88,3 @@ export default function Home() {
     </main>
   )
 }
-

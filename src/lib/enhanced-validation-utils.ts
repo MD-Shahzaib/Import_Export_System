@@ -169,6 +169,9 @@ function validateType(
         return null // Empty values are handled by required check
     }
 
+    // Temporary convert value to string for type checking 
+    value = String(value);
+
     switch (type) {
         case "string":
             if (typeof value !== "string") {

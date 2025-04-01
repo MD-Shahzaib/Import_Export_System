@@ -1,3 +1,6 @@
+import { useFailedSubmissionsStore } from "@/components/failed-submissions-store"
+import { validateFile as enhancedValidateFile } from "@/lib/enhanced-validation-utils"
+
 /**
  * Submits data to an API endpoint
  */
@@ -8,6 +11,7 @@ export async function submitDataToApi(
         method?: string
         headers?: Record<string, string>
         onProgress?: (progress: number) => void
+        trackFailures?: boolean
     } = {},
 ): Promise<{ success: boolean; message: string; response?: any }> {
     const {
@@ -16,6 +20,7 @@ export async function submitDataToApi(
             "Content-Type": "application/json",
         },
         onProgress,
+        trackFailures = true,
     } = options
 
     try {
@@ -45,11 +50,31 @@ export async function submitDataToApi(
         }
 
         if (!response.ok) {
-            return {
+            const errorResult = {
                 success: false,
                 message: responseData.message || `Error: ${response.status} ${response.statusText}`,
                 response: responseData,
             }
+
+            // Track the failed submission if enabled
+            if (trackFailures) {
+                useFailedSubmissionsStore.getState().addFailedSubmission({
+                    data,
+                    file: null,
+                    endpoint,
+                    method,
+                    headers,
+                    error: {
+                        message: errorResult.message,
+                        details: `Status: ${response.status} ${response.statusText}`,
+                        response: responseData,
+                    },
+                    submissionType: "json",
+                    retryCount: 0,
+                })
+            }
+
+            return errorResult
         }
 
         return {
@@ -59,10 +84,30 @@ export async function submitDataToApi(
         }
     } catch (error) {
         console.error("API submission error:", error)
-        return {
+
+        const errorResult = {
             success: false,
             message: error instanceof Error ? error.message : "Unknown error occurred",
         }
+
+        // Track the failed submission if enabled
+        if (trackFailures) {
+            useFailedSubmissionsStore.getState().addFailedSubmission({
+                data,
+                file: null,
+                endpoint,
+                method,
+                headers,
+                error: {
+                    message: errorResult.message,
+                    details: error instanceof Error ? error.stack : "No details available",
+                },
+                submissionType: "json",
+                retryCount: 0,
+            })
+        }
+
+        return errorResult
     }
 }
 
@@ -78,9 +123,17 @@ export async function submitFileToApi(
         additionalData?: Record<string, any>
         fieldName?: string
         onProgress?: (progress: number) => void
+        trackFailures?: boolean
     } = {},
 ): Promise<{ success: boolean; message: string; response?: any }> {
-    const { method = "POST", headers = {}, additionalData = {}, fieldName = "file", onProgress } = options
+    const {
+        method = "POST",
+        headers = {},
+        additionalData = {},
+        fieldName = "file",
+        onProgress,
+        trackFailures = true,
+    } = options
 
     try {
         // Create FormData
@@ -132,7 +185,7 @@ export async function submitFileToApi(
         }
 
         if (!response.ok) {
-            return {
+            const errorResult = {
                 success: false,
                 message:
                     typeof responseData === "object" && responseData.message
@@ -140,6 +193,30 @@ export async function submitFileToApi(
                         : `Error: ${response.status} ${response.statusText}`,
                 response: responseData,
             }
+
+            // Track the failed submission if enabled
+            if (trackFailures) {
+                useFailedSubmissionsStore.getState().addFailedSubmission({
+                    data: null,
+                    file: {
+                        name: file.name,
+                        size: file.size,
+                        type: file.type,
+                    },
+                    endpoint,
+                    method,
+                    headers: requestHeaders,
+                    error: {
+                        message: errorResult.message,
+                        details: `Status: ${response.status} ${response.statusText}`,
+                        response: responseData,
+                    },
+                    submissionType: "file",
+                    retryCount: 0,
+                })
+            }
+
+            return errorResult
         }
 
         return {
@@ -149,45 +226,77 @@ export async function submitFileToApi(
         }
     } catch (error) {
         console.error("File submission error:", error)
-        return {
+
+        const errorResult = {
             success: false,
             message: error instanceof Error ? error.message : "Unknown error occurred",
         }
+
+        // Track the failed submission if enabled
+        if (trackFailures) {
+            useFailedSubmissionsStore.getState().addFailedSubmission({
+                data: null,
+                file: {
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                },
+                endpoint,
+                method,
+                headers,
+                error: {
+                    message: errorResult.message,
+                    details: error instanceof Error ? error.stack : "No details available",
+                },
+                submissionType: "file",
+                retryCount: 0,
+            })
+        }
+
+        return errorResult
     }
 }
 
-/**
- * Validates file size and type
- */
-export function validateFile(
-    file: File,
-    options: {
-        maxSizeMB?: number
-        acceptedFormats?: string[]
-    } = {},
-): { valid: boolean; message?: string } {
-    const { maxSizeMB = 10, acceptedFormats = [] } = options
+interface FileValidationOptions {
+    maxSizeMB: number
+    acceptedFormats: string[]
+}
 
-    // Check file size
-    const fileSizeInMB = file.size / (1024 * 1024)
-    if (fileSizeInMB > maxSizeMB) {
+interface FileValidationResult {
+    valid: boolean
+    message?: string
+}
+
+/**
+ * Validates a file before submission
+ */
+export function validateFile(file: File, options: FileValidationOptions): FileValidationResult {
+    const { maxSizeMB, acceptedFormats } = options
+
+    if (!file) {
         return {
             valid: false,
-            message: `File size exceeds the maximum allowed size of ${maxSizeMB}MB`,
+            message: "No file selected",
         }
     }
 
-    // Check file format if acceptedFormats is provided
-    if (acceptedFormats.length > 0) {
-        const fileExtension = file.name.substring(file.name.lastIndexOf(".")).toLowerCase()
-        if (!acceptedFormats.includes(fileExtension)) {
-            return {
-                valid: false,
-                message: `File format not supported. Accepted formats: ${acceptedFormats.join(", ")}`,
-            }
+    const fileSizeMB = file.size / (1024 * 1024)
+    if (fileSizeMB > maxSizeMB) {
+        return {
+            valid: false,
+            message: `File size exceeds the maximum limit of ${maxSizeMB}MB`,
+        }
+    }
+
+    const fileExtension = file.name.substring(file.name.lastIndexOf(".")).toLowerCase()
+    if (!acceptedFormats.includes(fileExtension)) {
+        return {
+            valid: false,
+            message: `Invalid file format. Accepted formats: ${acceptedFormats.join(", ")}`,
         }
     }
 
     return { valid: true }
 }
 
+export { enhancedValidateFile }

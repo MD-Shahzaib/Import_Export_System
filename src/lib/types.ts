@@ -143,3 +143,28 @@ export interface SchemaValidationProps {
     onCancel: () => void
 }
 
+export interface FailedSubmission {
+    id: string
+    timestamp: number
+    data: any[] | null
+    file: {
+        name: string
+        size: number
+        type: string
+    } | null
+    endpoint: string
+    method: string
+    headers: Record<string, string>
+    error: {
+        message: string
+        details?: string
+        response?: any
+    }
+    submissionType: "json" | "file"
+    retryCount: number
+}
+
+export interface FailedSubmissionsState {
+    submissions: FailedSubmission[]
+    selectedSubmission: FailedSubmission | null
+}

@@ -30,6 +30,9 @@ interface ApiSubmissionDialogProps {
     acceptedFormats?: string[]
     onClose: () => void
     initialEndpoint?: string
+    initialMethod?: string
+    initialHeaders?: Record<string, string>
+    initialSubmissionType?: "json" | "file"
 }
 
 export function ApiSubmissionDialog({
@@ -38,20 +41,25 @@ export function ApiSubmissionDialog({
     acceptedFormats = [".xlsx", ".xls", ".csv"],
     onClose,
     initialEndpoint = "",
+    initialMethod = "POST",
+    initialHeaders,
+    initialSubmissionType = "json",
 }: ApiSubmissionDialogProps) {
     const [apiEndpoint, setApiEndpoint] = useState<string>(initialEndpoint)
-    const [method, setMethod] = useState<string>("POST")
+    const [method, setMethod] = useState<string>(initialMethod)
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
     const [submitProgress, setSubmitProgress] = useState<number>(0)
     const [submitResult, setSubmitResult] = useState<{ success: boolean; message: string; response?: any } | null>(null)
     const [activeTab, setActiveTab] = useState<string>("basic")
-    const [headers, setHeaders] = useState<{ key: string; value: string }[]>([
-        { key: "Content-Type", value: "application/json" },
-    ])
+    const [headers, setHeaders] = useState<{ key: string; value: string }[]>(
+        initialHeaders
+            ? Object.entries(initialHeaders).map(([key, value]) => ({ key, value }))
+            : [{ key: "Content-Type", value: "application/json" }],
+    )
     const [includeAllFields, setIncludeAllFields] = useState<boolean>(true)
     const [selectedFields, setSelectedFields] = useState<string[]>([])
     const [showResponse, setShowResponse] = useState<boolean>(false)
-    const [submissionType, setSubmissionType] = useState<"json" | "file">("json")
+    const [submissionType, setSubmissionType] = useState<"json" | "file">(initialSubmissionType)
     const [customFile, setCustomFile] = useState<File | null>(null)
     const [fileFieldName, setFileFieldName] = useState<string>("file")
     const [additionalData, setAdditionalData] = useState<{ key: string; value: string }[]>([])
@@ -617,4 +625,3 @@ export function ApiSubmissionDialog({
         </Dialog>
     )
 }
-
